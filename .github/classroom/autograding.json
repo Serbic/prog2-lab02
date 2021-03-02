@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "Run Mandelbrot unit tests",
+      "setup": "",
+      "run": "gradle :Mandelbrot:test --info",
+      "input": "",
+      "output": "",
+      "comparison": "included",
+      "timeout": 10,
+      "points": 2
+    }
+  ]
+}
