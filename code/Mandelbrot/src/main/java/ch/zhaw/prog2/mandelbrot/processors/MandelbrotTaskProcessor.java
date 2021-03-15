@@ -73,7 +73,6 @@ public class MandelbrotTaskProcessor extends MandelbrotProcessor {
         processorListener.processingStopped(duration);
     }
 
-
     /**
      * This class defines the thread that does the computation.
      * The run method computes the image one pixel at a time.

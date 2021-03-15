@@ -11,8 +11,7 @@ import java.util.concurrent.*;
 public class MandelbrotCallableProcessor extends MandelbrotProcessor {
 
     private volatile boolean terminate; // signal the threads to abort processing and terminate
-    // TODO: Declare ExecutorService
-
+    private ExecutorService executorService;
 
     /**
      * Initialize the Mandelbrot processor.
@@ -39,37 +38,33 @@ public class MandelbrotCallableProcessor extends MandelbrotProcessor {
         // use a task for each row
         super.tasksRemaining = height;  // Records how many of the threads are still running
         super.startTime = System.currentTimeMillis();
+        // starts the the executor service with the given number of threads.
+        executorService = Executors.newFixedThreadPool(numThreads);
+        // process rows using the Callable MandelbrotTask and store returned Futures in a list: List<Future<ImageRow>>
+        List<Future<ImageRow>> futureList = new ArrayList<>();
+        for (int i = 1; i <= height; i++) {
+            futureList.add(executorService.submit(new MandelbrotTask(i)));
+        }
 
-        // TODO: Start the the executor service with the given number of threads.
-
-
-
-        // TODO: process rows using the Callable MandelbrotTask and store returned Futures in a list: List<Future<ImageRow>>
-
-
-
-
-
-        long duration = System.currentTimeMillis()-startTime;
+        long duration = System.currentTimeMillis() - startTime;
         System.out.println("Tasks submitted after " + duration + "ms");
 
-        // TODO: get results from Future list and send them to the Listener (GUI)
+        // get results from Future list and send them to the Listener (GUI)
         try {
-
-
-
-
-
-//        } catch (ExecutionException e) {
-//            // calculation is aborted (e.g. stopTask() calles)
-//            System.out.println(e.getCause().getMessage());
-//        } catch (InterruptedException e) {
-//            System.out.println("Interrupted: " + e.getMessage());
+            for (Future<ImageRow> future : futureList) {
+                processorListener.rowProcessed(future.get());
+            }
+        } catch (ExecutionException e) {
+            // calculation is aborted (e.g. stopTask() call)
+            System.out.println(e.getCause().getMessage());
+        } catch (InterruptedException e) {
+            System.out.println("Interrupted: " + e.getMessage());
         } finally {
             // stop processing and shutdown executor
             stopProcessing();
         }
     }
+
 
     /**
      * Stopp processing tasks and terminate all threads.
@@ -78,10 +73,9 @@ public class MandelbrotCallableProcessor extends MandelbrotProcessor {
     @Override
     public void stopProcessing() {
         terminate = true;  // signal the threads to abort
-        // TODO: &shutdown / unset executor
-
-
-
+        // shut the executor down
+        executorService.shutdown();
+        //executorService.awaitTermination(1,TimeUnit.MINUTES);
 
         // calculate processing time
         long duration = System.currentTimeMillis() - startTime;
@@ -100,15 +94,62 @@ public class MandelbrotCallableProcessor extends MandelbrotProcessor {
      * Extended to implement also Callable.
      * the call() method calculates and return only the result for the startRow.
      */
-    private class MandelbrotTask implements Callable {
-        // TODO: Use Task implementation from MandelbrotExecutorProcessor change it to a Callable.
+    private class MandelbrotTask implements Callable<ImageRow> {
+        //  MandelbrotExecutorProcessor using Callable.
+        // these values define the area and depth of the Mandelbrot graphic
+        // we keep them local to allow to extend the function to
+        // select the area and depth dynamically.
+        private final double xmin, xmax, ymin, ymax, dx, dy;
+        private final int maxIterations;
+        // this tasks calculates the following range of rows
+        private final int startRow, endRow;
 
-
-
-        public ImageRow call() throws Exception {
-            return null;
+        /** initialize the Task to calculate a single row */
+        MandelbrotTask(int row) {
+            this(row, row);
         }
 
+        /** initialize the Task to calculate a range of rows */
+        MandelbrotTask(int startRow, int endRow) {
+            this.startRow = startRow;
+            this.endRow = endRow;
+            xmin = -1.6744096740931858;
+            xmax = -1.674409674093473;
+            ymin = 4.716540768697223E-5;
+            ymax = 4.716540790246652E-5;
+            dx = (xmax - xmin) / (width - 1);
+            dy = (ymax - ymin) / (height - 1);
+            maxIterations = 10000;
+        }
 
-    } // end MandelbrotTask
+        public ImageRow call() throws Exception{
+
+            return calculateRow(this.startRow);
+        }
+
+        private ImageRow calculateRow(int row) {
+            final ImageRow imageRow = new ImageRow(row, width);
+            double x;
+            double y = ymax - dy * row;
+
+            for (int col = 0; col < width; col++) {
+                x = xmin + dx * col;
+                int count = 0;
+                double xx = x;
+                double yy = y;
+                while (count < maxIterations && (xx * xx + yy * yy) < 4) {
+                    count++;
+                    double newxx = xx * xx - yy * yy + x;
+                    yy = 2 * xx * yy + y;
+                    xx = newxx;
+                }
+                // select color based on count of iterations
+                imageRow.pixels[col] = (count != maxIterations) ?
+                    palette[count % palette.length] : Color.BLACK;
+                // Check for the signal to immediately abort the computation.
+                if (terminate) return null;
+            }
+            return imageRow;
+        }
+    }// end MandelbrotTask
 }
